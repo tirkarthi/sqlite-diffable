@@ -1,0 +1,51 @@
+# Ref : https://medium.com/swlh/setting-up-github-actions-for-go-project-ea84f4ed3a40
+
+name: main
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '1.17.7'
+
+    # Cache dependencies
+    - uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    # Install all the dependencies
+    - name: Install dependencies
+      run: |
+        go version
+        go install golang.org/x/lint/golint@latest
+
+    # Run vet & lint on the code
+    - name: Run vet & lint
+      run: |
+        go vet .
+        golint .
+
+    # Run build of the application
+    - name: Run build
+      run: go build .
+
+    # Run testing on the code
+    - name: Run testing
+      run: go test -v ./...
