@@ -1,7 +1,3 @@
-/*
-   Copyright © 2022 Karthikeyan Singaravelan <tir.karthi@gmail.com>
-
-*/
 package cmd
 
 import (
@@ -14,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // SQLite driver usage
 	"github.com/spf13/cobra"
 )
 
@@ -29,9 +25,8 @@ var dumpCmd = &cobra.Command{
 			if os.IsNotExist(err) {
 				err := errors.New("Path doesn't exist")
 				return err
-			} else {
-				return err
 			}
+			return err
 		}
 
 		if filePath.IsDir() {
@@ -110,7 +105,7 @@ var dumpCmd = &cobra.Command{
 				"columns": columns,
 				"schema":  schema,
 			}
-			metadataJson, _ := json.MarshalIndent(metadata, "", "    ")
+			metadataJSON, _ := json.MarshalIndent(metadata, "", "    ")
 
 			for rows.Next() {
 				for i := range columns {
@@ -120,7 +115,7 @@ var dumpCmd = &cobra.Command{
 				rows.Scan(valuePtrs...)
 				var entries = []interface{}{}
 
-				for i, _ := range columns {
+				for i := range columns {
 					val := values[i]
 
 					b, ok := val.([]byte)
@@ -141,7 +136,7 @@ var dumpCmd = &cobra.Command{
 			metadataPath := filepath.Join(output, table+".metadata.json")
 			tablePath := filepath.Join(output, table+".ndjson")
 			err = ioutil.WriteFile(metadataPath,
-				[]byte(metadataJson), 0644)
+				[]byte(metadataJSON), 0644)
 			if err != nil {
 				return err
 			}

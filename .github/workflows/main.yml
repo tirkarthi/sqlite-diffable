@@ -40,7 +40,7 @@ jobs:
     - name: Run vet & lint
       run: |
         go vet .
-        golint .
+        golint ./...
 
     # Run build of the application
     - name: Run build
