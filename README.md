@@ -1,5 +1,7 @@
 ### sqlite-diffable
 
+[![main](https://github.com/tirkarthi/sqlite-diffable/actions/workflows/main.yml/badge.svg)](https://github.com/tirkarthi/sqlite-diffable/actions/workflows/main.yml)
+
 A golang port of [sqlite-diffable](https://github.com/simonw/sqlite-diffable/)
 
 
