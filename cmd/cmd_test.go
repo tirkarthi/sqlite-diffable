@@ -7,14 +7,20 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func executeCommand(root *cobra.Command, args ...string) (output string, err error) {
 	_, output, err = executeCommandC(root, args...)
+
+	// Reset flags during tests since the flags persistent throughout cause issues
+	defer resetFlags(rootCmd)
 	return output, err
 }
 
@@ -46,6 +52,25 @@ func checkStringContains(t *testing.T, got, expected string) {
 	}
 }
 
+// https://github.com/spf13/cobra/issues/770#issuecomment-627510928
+func resetFlags(cmd *cobra.Command) {
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Value.Type() == "stringSlice" {
+			// XXX: unfortunately, flag.Value.Set() appends to original
+			// slice, not resets it, so we retrieve pointer to the slice here
+			// and set it to new empty slice manually
+			value := reflect.ValueOf(flag.Value).Elem().FieldByName("value")
+			ptr := (*[]string)(unsafe.Pointer(value.Pointer()))
+			*ptr = make([]string, 0)
+		}
+
+		flag.Value.Set(flag.DefValue)
+	})
+	for _, cmd := range cmd.Commands() {
+		resetFlags(cmd)
+	}
+}
+
 func Test_ExecuteCommandHelp(t *testing.T) {
 	output, err := executeCommand(rootCmd, "--help")
 	checkStringContains(t, output, "Dump sqlite database metadata and table")
@@ -73,7 +98,7 @@ func Test_ExecuteCommandNotExistentFile(t *testing.T) {
 	checkStringContains(t, output, `Path doesn't exist`)
 }
 
-func Test_ExecuteCommandSimple(t *testing.T) {
+func Test_ExecuteCommandAll(t *testing.T) {
 	dir, err := ioutil.TempDir("", "example")
 	if err != nil {
 		log.Fatal(err)
@@ -87,19 +112,86 @@ func Test_ExecuteCommandSimple(t *testing.T) {
 		t.Errorf("Got output %s", output)
 	}
 
-	outputpath := filepath.Join(dir, "Post.ndjson")
-	outputfile, err := os.Stat(outputpath)
+	outputPath := filepath.Join(dir, "Post.ndjson")
+	outputFile, err := os.Stat(outputPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	content, err := ioutil.ReadFile(outputpath)
+	content, err := ioutil.ReadFile(outputPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 	checkStringContains(t, string(content), `Prisma is a database toolkit`)
 
-	if outputfile.IsDir() {
+	if outputFile.IsDir() {
 		t.Errorf("Path should be a file")
+	}
+
+	files := []string{"Post.ndjson", "Post1.ndjson", "Post.metadata.json", "Post1.metadata.json"}
+	for _, file := range files {
+		outputPath := filepath.Join(dir, file)
+		_, err = os.Stat(outputPath)
+		if err != nil {
+			t.Errorf("%s should be present.", file)
+		}
+	}
+}
+
+func Test_ExecuteCommandNoAll(t *testing.T) {
+	dir, err := ioutil.TempDir("", "example")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer os.RemoveAll(dir)
+
+	output, _ := executeCommand(rootCmd, "dump", "--path", "test.db", "--output", dir)
+
+	checkStringContains(t, string(output), "You must pass --all or specify some tables")
+
+	files := []string{"Post.ndjson", "Post1.ndjson", "Post.metadata.json", "Post1.metadata.json"}
+	for _, file := range files {
+		outputPath := filepath.Join(dir, file)
+		_, err = os.Stat(outputPath)
+		if err == nil {
+			t.Errorf("%s should not be present.", file)
+		}
+	}
+}
+
+func Test_ExecuteCommandSingleTable(t *testing.T) {
+	dir, err := ioutil.TempDir("", "example")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer os.RemoveAll(dir)
+
+	output, _ := executeCommand(rootCmd, "dump", "--path", "test.db", "--output", dir, "Post")
+
+	if output != "" {
+		t.Errorf("Got output %s", output)
+	}
+
+	outputPath := filepath.Join(dir, "Post.ndjson")
+	_, err = os.Stat(outputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	content, err := ioutil.ReadFile(outputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	checkStringContains(t, string(content), `Prisma is a database toolkit`)
+
+	files := []string{"Post1.ndjson", "Post1.metadata.json"}
+	for _, file := range files {
+		outputPath := filepath.Join(dir, file)
+		_, err = os.Stat(outputPath)
+		if err == nil {
+			t.Errorf("%s should not be present.", file)
+		}
 	}
 }

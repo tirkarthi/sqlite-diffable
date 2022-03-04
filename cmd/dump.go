@@ -14,6 +14,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// https://stackoverflow.com/a/10485970/2610955
+func contains(tables []string, target string) bool {
+	for _, table := range tables {
+		if table == target {
+			return true
+		}
+	}
+	return false
+}
+
 var dumpCmd = &cobra.Command{
 	Use:   "dump [tables]",
 	Short: "Dump sqlite database metadata and table",
@@ -63,22 +73,34 @@ var dumpCmd = &cobra.Command{
 		}
 		defer db.Close()
 
-		tables := []string{}
+		allTables := []string{}
+		queryTables := []string{}
 		all, _ := cmd.Flags().GetBool("all")
 
-		if all {
-			allTablesQuery := "SELECT name FROM sqlite_master WHERE type='table'"
-			rows, _ := db.Query(allTablesQuery)
-			for rows.Next() {
-				var table string
-				rows.Scan(&table)
-				tables = append(tables, table)
-			}
-		} else {
-			tables = args
+		if !all && len(args) == 0 {
+			msg := "You must pass --all or specify some tables"
+			return errors.New(msg)
 		}
 
-		for _, table := range tables {
+		allTablesQuery := "SELECT name FROM sqlite_master WHERE type='table'"
+		rows, _ := db.Query(allTablesQuery)
+		for rows.Next() {
+			var table string
+			rows.Scan(&table)
+			allTables = append(allTables, table)
+		}
+
+		if all {
+			queryTables = allTables
+		} else {
+			for _, arg := range args {
+				if contains(allTables, arg) {
+					queryTables = append(queryTables, arg)
+				}
+			}
+		}
+
+		for _, table := range queryTables {
 			rows, err := db.Query("select * from " + table)
 			if err != nil {
 				return err
